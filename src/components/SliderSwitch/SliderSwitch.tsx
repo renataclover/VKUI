@@ -1,4 +1,4 @@
-import React, { HTMLAttributes } from 'react';
+import React, { HTMLAttributes, KeyboardEvent } from 'react';
 import SliderSwitchButton from './SliderSwitchButton';
 import classNames from '../../lib/classNames';
 import { HasFormLabels, HasPlatform } from '../../types';
@@ -19,6 +19,7 @@ interface Props extends HTMLAttributes<HTMLDivElement>, HasPlatform, HasFormLabe
 interface State {
   firstActive: boolean;
   secondActive: boolean;
+  focusedByTab: boolean;
   focusedOptionId: number;
 }
 
@@ -26,8 +27,11 @@ export default class SliderSwitch extends React.Component<Props, State> {
   state: State = {
     firstActive: Boolean(this.props.options[0].selected),
     secondActive: Boolean(this.props.options[1].selected),
+    focusedByTab: false,
     focusedOptionId: -1,
   };
+
+  private node: Element;
 
   handleFirstClick = () => {
     const { options, onSwitch } = this.props;
@@ -71,6 +75,62 @@ export default class SliderSwitch extends React.Component<Props, State> {
     }));
   };
 
+  switchByKey = (event: KeyboardEvent) => {
+    debugger;
+    if (event.key !== 'Enter' && event.key !== 'Spacebar') {
+      return;
+    }
+
+    const { onSwitch, options } = this.props;
+
+    event.preventDefault();
+
+    this.setState(({ firstActive, secondActive }) => {
+      if (!firstActive && !secondActive) {
+        return {
+          firstActive: true,
+          secondActive: false,
+        };
+      }
+
+      return {
+        firstActive: !firstActive,
+        secondActive: !secondActive,
+      };
+    }, () => {
+      const selected = Object.values(this.state)
+        .findIndex((item) => typeof item === 'boolean' && item);
+
+      onSwitch && onSwitch(options[selected].value);
+    });
+  };
+
+  toggleFocus = () => {
+    this.setState(({ focusedByTab }) =>({
+      focusedByTab: !focusedByTab,
+    }));
+  };
+
+  handleDocumentClick = (event: Event) => {
+    const thisNode = this.node;
+
+    if (this.state.focusedByTab && thisNode && !thisNode.contains(event.target as Node)) {
+      this.setState({
+        focusedByTab: false
+      });
+    }
+  };
+
+  componentDidMount() {
+    document.addEventListener('click', this.handleDocumentClick, false);
+    document.addEventListener('touchend', this.handleDocumentClick, false);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener('click', this.handleDocumentClick, false);
+    document.removeEventListener('touchend', this.handleDocumentClick, false);
+  }
+
   static getDerivedStateFromProps(nextProps: Props) {
     if (nextProps.activeValue) {
       return {
@@ -83,8 +143,8 @@ export default class SliderSwitch extends React.Component<Props, State> {
   }
 
   public render() {
-    const { name, options, className } = this.props;
-    const { firstActive, secondActive, focusedOptionId } = this.state;
+    const { name, options, className, tabIndex = 0 } = this.props;
+    const { firstActive, secondActive, focusedOptionId, focusedByTab } = this.state;
     const [firstOption, secondOption] = options;
     let value = null;
 
@@ -96,8 +156,17 @@ export default class SliderSwitch extends React.Component<Props, State> {
 
     return (
       <div
-        className={classNames('SliderSwitch__container', className)}
+        tabIndex={tabIndex}
+        className={classNames('SliderSwitch__container', {
+          'SliderSwitch__container--focus': focusedByTab,
+        },
+        className,
+        )}
+        onFocus={this.toggleFocus}
+        onBlur={this.toggleFocus}
+        onKeyDown={this.switchByKey}
         onMouseLeave={this.resetFocusedOption}
+        ref={(node) => this.node = node}
       >
         {!firstActive && !secondActive &&
           <div className="SliderSwitch__border" />
